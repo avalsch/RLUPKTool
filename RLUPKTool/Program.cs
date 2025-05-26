@@ -1,11 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.IO;
+﻿using System.Text;
 using System.Security.Cryptography;
-using ICSharpCode.SharpZipLib.Zip.Compression.Streams;
+using System.IO.Compression;
 
 namespace RLUPKTool
 {
@@ -37,7 +32,7 @@ namespace RLUPKTool
 	// Unreal string
 	public class FString : IUESerializable
 	{
-		private string InnerString;
+		private string InnerString = string.Empty;
 		private bool bIsUnicode;
 
 		public void Deserialize(BinaryReader Reader)
@@ -55,8 +50,6 @@ namespace RLUPKTool
 				var Data = Reader.ReadBytes(-Length);
 				InnerString = Encoding.Unicode.GetString(Data, 0, Data.Length - 2);
 			}
-
-			InnerString = null;
 		}
 
 		public override string ToString()
@@ -68,7 +61,7 @@ namespace RLUPKTool
 	// List wrapper with Unreal array serialization methods
 	public class TArray<T> : List<T>, IUESerializable where T : new()
 	{
-		private Func<T> Constructor = null;
+		private Func<T>? Constructor;
 
 		public TArray() : base() {}
 
@@ -86,7 +79,7 @@ namespace RLUPKTool
 
 			for (var i = 0; i < Length; i++)
 			{
-				var Elem = Constructor != null ? Constructor() : new T();
+				var Elem = Constructor != null ? Constructor() ?? new T() : new T();
 				Elem = (T)(GenericSerializer.Deserialize(Elem, Reader));
 				Add(Elem);
 			}
@@ -145,7 +138,7 @@ namespace RLUPKTool
 	{
 		public long UncompressedOffset, CompressedOffset;
 		public int UncompressedSize, CompressedSize;
-		private FPackageFileSummary Sum;
+		private FPackageFileSummary Sum = new();
 
 		public FCompressedChunkInfo() { }
 
@@ -235,7 +228,7 @@ namespace RLUPKTool
 
 		public ECompressionFlags CompressionFlags;
 
-		public TArray<FCompressedChunkInfo> CompressedChunks;
+		public TArray<FCompressedChunkInfo> CompressedChunks = new();
 
 		// Probably a hash
 		private int Unknown5;
@@ -368,15 +361,13 @@ namespace RLUPKTool
 		// AES decrypt with Rocket League's key
 		private static byte[] Decrypt(byte[] Buffer)
 		{
-			var Rijndael = new RijndaelManaged
-			{
-				KeySize = 256,
-				Key = AESKey,
-				Mode = CipherMode.ECB,
-				Padding = PaddingMode.None
-			};
+			var aes = Aes.Create();
+			aes.KeySize = 256;
+			aes.Key = AESKey;
+			aes.Mode = CipherMode.ECB;
+			aes.Padding = PaddingMode.None;
 
-			var Decryptor = Rijndael.CreateDecryptor();
+			var Decryptor = aes.CreateDecryptor();
 			return Decryptor.TransformFinalBlock(Buffer, 0, Buffer.Length);
 		}
 
@@ -460,7 +451,7 @@ namespace RLUPKTool
 								Input.Read(CompressedData, 0, CompressedData.Length);
 
 								// Zlib inflate
-								var ZlibStream = new InflaterInputStream(new MemoryStream(CompressedData));
+								var ZlibStream = new ZLibStream(new MemoryStream(CompressedData), CompressionMode.Decompress);
 								ZlibStream.CopyTo(Output);
 							}
 						}
